@@ -1,6 +1,8 @@
 name: Build and Release
 
 on:
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       source_ref:
@@ -33,7 +35,48 @@ jobs:
       image: opensuse/tumbleweed:latest
 
     steps:
+      - name: Resolve source revision
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPO_SLUG: sieciowiecxyz/codex-army
+          REQUESTED_REF: ${{ github.event_name == 'push' && github.ref_name || github.event_name == 'schedule' && 'main' || inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          commit="$(git ls-remote "https://github.com/${SOURCE_REPO_SLUG}.git" "$REQUESTED_REF" | awk '{print $1}' | head -n1)"
+          if [[ -z "$commit" ]]; then
+            commit="$(git ls-remote "https://github.com/${SOURCE_REPO_SLUG}.git" "refs/heads/${REQUESTED_REF}" | awk '{print $1}' | head -n1)"
+          fi
+          if [[ -z "$commit" ]]; then
+            commit="$(git ls-remote "https://github.com/${SOURCE_REPO_SLUG}.git" "refs/tags/${REQUESTED_REF}" | awk '{print $1}' | head -n1)"
+          fi
+          if [[ -z "$commit" ]]; then
+            printf 'error: could not resolve source ref: %s\n' "$REQUESTED_REF" >&2
+            exit 1
+          fi
+
+          short_commit="${commit:0:12}"
+          release_tag="source-${short_commit}"
+          should_build="true"
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            should_build="false"
+          fi
+
+          {
+            echo "requested_ref=$REQUESTED_REF"
+            echo "commit=$commit"
+            echo "short_commit=$short_commit"
+            echo "release_tag=$release_tag"
+            echo "should_build=$should_build"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'source ref: %s\n' "$REQUESTED_REF"
+          printf 'source commit: %s\n' "$commit"
+          printf 'release tag: %s\n' "$release_tag"
+          printf 'should build: %s\n' "$should_build"
+
       - name: Install build dependencies
+        if: steps.source.outputs.should_build == 'true'
         run: |
           zypper --non-interactive refresh
           zypper --non-interactive install --no-recommends \
@@ -55,30 +98,40 @@ jobs:
             xz
 
       - name: Install Rust
+        if: steps.source.outputs.should_build == 'true'
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Checkout installer repository
+        if: steps.source.outputs.should_build == 'true'
         uses: actions/checkout@v4
 
       - name: Build release artifacts
+        if: steps.source.outputs.should_build == 'true'
         env:
           SOURCE_REPO: https://github.com/sieciowiecxyz/codex-army.git
-          SOURCE_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.source_ref }}
-          VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+          SOURCE_REF: ${{ steps.source.outputs.commit }}
+          VERSION: ${{ github.event_name == 'push' && github.ref_name || github.event_name == 'schedule' && format('0.0.0+{0}', steps.source.outputs.short_commit) || inputs.version }}
         run: |
           VERSION="${VERSION#v}" ./scripts/build-release.sh
 
       - name: Upload build artifacts
+        if: steps.source.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: codex-army-opensuse-x86_64
           path: dist/*
 
       - name: Publish GitHub Release
-        if: github.event_name == 'push' || inputs.publish_release == 'true'
+        if: steps.source.outputs.should_build == 'true' && (github.event_name == 'push' || github.event_name == 'schedule' || inputs.publish_release == 'true')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'push' && github.ref_name || format('build-{0}', inputs.source_ref) }}
+          tag_name: ${{ steps.source.outputs.release_tag }}
+          name: codex-army ${{ steps.source.outputs.short_commit }}
+          body: |
+            Automated openSUSE x86_64 build from `sieciowiecxyz/codex-army`.
+
+            Source ref: `${{ steps.source.outputs.requested_ref }}`
+            Source commit: `${{ steps.source.outputs.commit }}`
           files: dist/*
