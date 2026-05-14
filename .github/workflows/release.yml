@@ -1,0 +1,81 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or commit in sieciowiecxyz/codex-army
+        required: true
+        default: main
+      version:
+        description: RPM/package version
+        required: true
+        default: 0.0.0
+      publish_release:
+        description: Publish a GitHub Release
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: opensuse/tumbleweed:latest
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          zypper --non-interactive refresh
+          zypper --non-interactive install --no-recommends \
+            bash \
+            ca-certificates \
+            curl \
+            file \
+            gcc \
+            git \
+            libopenssl-devel \
+            make \
+            pkgconf-pkg-config \
+            rpm-build \
+            tar \
+            xz
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Checkout installer repository
+        uses: actions/checkout@v4
+
+      - name: Build release artifacts
+        env:
+          SOURCE_REPO: https://github.com/sieciowiecxyz/codex-army.git
+          SOURCE_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.source_ref }}
+          VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+        run: |
+          VERSION="${VERSION#v}" ./scripts/build-release.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-army-opensuse-x86_64
+          path: dist/*
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || inputs.publish_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'push' && github.ref_name || format('build-{0}', inputs.source_ref) }}
+          files: dist/*
+

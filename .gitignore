@@ -1,0 +1,5 @@
+dist/
+rpmbuild/
+work/
+*.tar.gz
+
