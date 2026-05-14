@@ -14,6 +14,15 @@ builds `codex-army`, then publishes:
 - `codex-army-installer-<ref>-x86_64.tar.gz`
 - `codex-army-<version>-1.x86_64.rpm`
 
+The release workflow uses a prebuilt openSUSE builder image from GHCR:
+
+```text
+ghcr.io/maku2903/codex-army-opensuse-builder:latest
+```
+
+The image is rebuilt weekly, manually, or whenever `build-image/Dockerfile` changes. Docker
+layers are cached with GitHub Actions cache, so image updates should only rebuild changed layers.
+
 ## Build Locally
 
 ```bash
@@ -35,6 +44,7 @@ Outputs are written to `dist/`.
 Use the `Build and Release` workflow.
 
 - `workflow_dispatch` builds any selected `source_ref`.
+- the daily schedule checks `sieciowiecxyz/codex-army@main` and builds only if the source commit is new.
 - pushing a tag like `v0.1.0` builds and publishes a GitHub Release.
 
 For unattended release creation, the workflow needs the default `GITHUB_TOKEN` permissions:
@@ -66,4 +76,3 @@ PREFIX="$HOME/.local" ./install.sh
 ```bash
 sudo zypper install ./codex-army-*.x86_64.rpm
 ```
-

@@ -1,0 +1,42 @@
+name: Build Builder Image
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 2 * * 0"
+  push:
+    branches:
+      - main
+    paths:
+      - build-image/Dockerfile
+      - .github/workflows/build-image.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push builder image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build-image/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/codex-army-opensuse-builder:latest
+            ghcr.io/${{ github.repository_owner }}/codex-army-opensuse-builder:${{ github.sha }}

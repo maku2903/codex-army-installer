@@ -27,36 +27,18 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: opensuse/tumbleweed:latest
+      image: ghcr.io/maku2903/codex-army-opensuse-builder:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Install build dependencies
-        run: |
-          zypper --non-interactive refresh
-          zypper --non-interactive install --no-recommends \
-            bash \
-            ca-certificates \
-            clang \
-            curl \
-            file \
-            gcc \
-            gcc-c++ \
-            gawk \
-            git \
-            gzip \
-            libopenssl-devel \
-            make \
-            pkgconf-pkg-config \
-            rpm-build \
-            tar \
-            which \
-            xz
-
       - name: Resolve source revision
         id: source
         shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
@@ -103,11 +85,6 @@ jobs:
           printf 'release tag: %s\n' "$release_tag"
           printf 'should build: %s\n' "$should_build"
 
-      - name: Install Rust
-        if: steps.source.outputs.should_build == 'true'
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-
       - name: Checkout installer repository
         if: steps.source.outputs.should_build == 'true'
         shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
@@ -120,6 +97,17 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           git checkout "$GITHUB_SHA"
 
+      - name: Restore Cargo cache
+        if: steps.source.outputs.should_build == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cargo-home/git
+            .cargo-home/registry
+          key: cargo-${{ runner.os }}-${{ steps.source.outputs.short_commit }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
       - name: Build release artifacts
         if: steps.source.outputs.should_build == 'true'
         shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
@@ -127,8 +115,8 @@ jobs:
           SOURCE_REPO: https://github.com/sieciowiecxyz/codex-army.git
           SOURCE_REF: ${{ steps.source.outputs.commit }}
           VERSION: ${{ github.event_name == 'push' && github.ref_name || github.event_name == 'schedule' && format('0.0.0+{0}', steps.source.outputs.short_commit) || inputs.version }}
+          CARGO_HOME: ${{ github.workspace }}/.cargo-home
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
           VERSION="${VERSION#v}" ./scripts/build-release.sh
 
       - name: Upload build artifacts
