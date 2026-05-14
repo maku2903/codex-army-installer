@@ -39,15 +39,19 @@ jobs:
           zypper --non-interactive install --no-recommends \
             bash \
             ca-certificates \
+            clang \
             curl \
             file \
             gcc \
+            gcc-c++ \
             git \
+            gzip \
             libopenssl-devel \
             make \
             pkgconf-pkg-config \
             rpm-build \
             tar \
+            which \
             xz
 
       - name: Install Rust
@@ -78,4 +82,3 @@ jobs:
         with:
           tag_name: ${{ github.event_name == 'push' && github.ref_name || format('build-{0}', inputs.source_ref) }}
           files: dist/*
-
