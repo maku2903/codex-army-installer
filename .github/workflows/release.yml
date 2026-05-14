@@ -112,7 +112,14 @@ jobs:
 
       - name: Checkout installer repository
         if: steps.source.outputs.should_build == 'true'
-        uses: actions/checkout@v4
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          git checkout "$GITHUB_SHA"
 
       - name: Build release artifacts
         if: steps.source.outputs.should_build == 'true'
