@@ -22,13 +22,17 @@ git clone --depth 1 --branch "$SOURCE_REF" "$SOURCE_REPO" "$work_dir" 2>/dev/nul
 }
 
 source_commit="$(git -C "$work_dir" rev-parse HEAD)"
+bin_target="codex-army"
+if ! grep -q 'name = "codex-army"' "$work_dir/codex-rs/cli/Cargo.toml"; then
+  bin_target="codex"
+fi
 
 (
   cd "$work_dir/codex-rs"
-  cargo build -p codex-cli --bin codex-army --release --locked
+  cargo build -p codex-cli --bin "$bin_target" --release --locked
 )
 
-binary="$work_dir/codex-rs/target/release/codex-army"
+binary="$work_dir/codex-rs/target/release/$bin_target"
 if [[ ! -x "$binary" ]]; then
   printf 'error: expected binary was not built: %s\n' "$binary" >&2
   exit 1
@@ -45,6 +49,7 @@ source_ref=$SOURCE_REF
 source_commit=$source_commit
 version=$VERSION
 target=$TARGET_TRIPLE
+bin_target=$bin_target
 built_on=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 
