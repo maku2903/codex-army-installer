@@ -59,7 +59,7 @@ jobs:
 
       - name: Resolve source revision
         id: source
-        shell: bash
+        shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -105,14 +105,12 @@ jobs:
 
       - name: Install Rust
         if: steps.source.outputs.should_build == 'true'
-        shell: bash
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Checkout installer repository
         if: steps.source.outputs.should_build == 'true'
-        shell: bash
+        shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -123,12 +121,13 @@ jobs:
 
       - name: Build release artifacts
         if: steps.source.outputs.should_build == 'true'
-        shell: bash
+        shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         env:
           SOURCE_REPO: https://github.com/sieciowiecxyz/codex-army.git
           SOURCE_REF: ${{ steps.source.outputs.commit }}
           VERSION: ${{ github.event_name == 'push' && github.ref_name || github.event_name == 'schedule' && format('0.0.0+{0}', steps.source.outputs.short_commit) || inputs.version }}
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           VERSION="${VERSION#v}" ./scripts/build-release.sh
 
       - name: Upload build artifacts
